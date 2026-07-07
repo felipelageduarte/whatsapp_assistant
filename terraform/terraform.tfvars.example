@@ -1,0 +1,9 @@
+# Copie para terraform.tfvars (gitignored) e preencha.
+# Alternativa sem arquivo: export TF_VAR_jwt_secret=$(openssl rand -hex 32)
+
+jwt_secret          = "GERE_COM_openssl_rand_-hex_32"
+telegram_bot_token  = "" # opcional
+domain              = "assistant.felipelageduarte.com.br"
+aws_region          = "us-east-1"
+aws_profile         = "felipelageduarte"
+bedrock_model       = "us.anthropic.claude-sonnet-4-6"

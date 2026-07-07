@@ -1,0 +1,48 @@
+#!/bin/bash
+set -e
+exec > /var/log/wa-deploy.log 2>&1
+cd /opt && curl -fsSL https://nodejs.org/dist/v24.14.0/node-v24.14.0-linux-arm64.tar.xz -o node.tar.xz
+tar -xf node.tar.xz && mv node-v24.14.0-linux-arm64 node && rm node.tar.xz
+ln -sf /opt/node/bin/node /usr/local/bin/node && ln -sf /opt/node/bin/npm /usr/local/bin/npm
+dnf install -y 'dnf-command(copr)'
+dnf copr enable -y @caddy/caddy epel-9-aarch64 || true
+dnf install -y caddy || (curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=arm64" -o /usr/local/bin/caddy && chmod +x /usr/local/bin/caddy)
+mkdir -p /opt/wa && cd /opt/wa
+aws s3 cp s3://${bundle_bucket}/bundle.tgz . --region ${region}
+tar -xzf bundle.tgz && rm bundle.tgz
+/usr/local/bin/npm install --omit=dev
+get(){ aws ssm get-parameter --name "/${project}/$1" --with-decryption --region ${region} --query Parameter.Value --output text 2>/dev/null; }
+cat > /opt/wa/.env <<ENV
+AWS_REGION=${region}
+BEDROCK_MODEL=${bedrock_model}
+WA_AUTH_BUCKET=${auth_bucket}
+VAPID_PUBLIC=$(get VAPID_PUBLIC)
+VAPID_PRIVATE=$(get VAPID_PRIVATE)
+VAPID_SUBJECT=$(get VAPID_SUBJECT)
+JWT_SECRET=$(get JWT_SECRET)
+TELEGRAM_BOT_TOKEN=$(get TELEGRAM_BOT_TOKEN)
+PORT=3000
+IGNORE_GROUPS=${ignore_groups}
+CONTEXT_WINDOW=${context_window}
+ENV
+cat > /etc/systemd/system/wa-assistant.service <<UNIT
+[Unit]
+Description=WhatsApp Assistant
+After=network.target
+[Service]
+WorkingDirectory=/opt/wa
+ExecStart=/usr/local/bin/node src/index.js
+Restart=always
+RestartSec=5
+User=root
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload && systemctl enable --now wa-assistant
+mkdir -p /etc/caddy
+cat > /etc/caddy/Caddyfile <<CADDY
+${domain} {
+    reverse_proxy localhost:3000
+}
+CADDY
+systemctl enable --now caddy 2>/dev/null || (caddy run --config /etc/caddy/Caddyfile &)

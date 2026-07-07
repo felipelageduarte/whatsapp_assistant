@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>WhatsApp Assistant</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <meta name="theme-color" content="#111b21" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="WA Assistant" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- LOGIN GATE -->
+  <section id="auth" class="auth hidden">
+    <div class="auth-card">
+      <h1>WhatsApp Assistant</h1>
+      <div class="auth-tabs">
+        <button data-auth="login" class="active">Entrar</button>
+        <button data-auth="register">Criar conta</button>
+      </div>
+      <form id="auth-form">
+        <input id="f-name" type="text" placeholder="Nome" class="hidden" autocomplete="name" />
+        <input id="f-email" type="email" placeholder="E-mail" autocomplete="email" required />
+        <input id="f-pass" type="password" placeholder="Senha (mín. 6)" autocomplete="current-password" required />
+        <button type="submit" class="btn-primary" id="auth-submit">Entrar</button>
+      </form>
+      <p id="auth-msg" class="msg"></p>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <div id="app" class="wa hidden">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <header class="side-head">
+        <div class="me" id="me-avatar">·</div>
+        <select id="acct" title="Número conectado"></select>
+        <button id="bell" class="icon-btn" title="Ativar notificações">🔔</button>
+        <button id="gear" class="icon-btn" title="Configurações">⚙</button>
+      </header>
+      <div class="search-bar"><input id="search" type="search" placeholder="Pesquisar conversa" /></div>
+      <div class="chat-list" id="chatList"></div>
+    </aside>
+
+    <!-- CHAT PANE -->
+    <main class="chat-pane" id="chatPane">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-logo">💬</div>
+        <p>Selecione uma conversa</p>
+        <small id="emptyHint"></small>
+      </div>
+
+      <div class="chat-open-view hidden" id="chatView">
+        <header class="chat-head" id="chatHead">
+          <button id="back" class="icon-btn back-btn">←</button>
+          <div class="peer-avatar" id="peerAvatar">·</div>
+          <div class="peer-info"><div class="peer-name" id="peerName"></div><div class="peer-sub" id="peerSub">toque para ver os dados do contato</div></div>
+        </header>
+        <div class="messages" id="messages"></div>
+        <footer class="composer">
+          <div class="tone-wrap">
+            <button id="toneBtn" class="icon-btn" title="Ajustar tom com IA">✨</button>
+            <div id="toneMenu" class="tone-menu hidden">
+              <button data-tone="mais ameno, gentil e empático">😊 Mais ameno</button>
+              <button data-tone="mais formal e profissional">👔 Mais formal</button>
+              <button data-tone="mais curto e direto ao ponto">✂️ Mais curto</button>
+              <button data-tone="mais firme e assertivo, sem ser rude">💪 Mais firme</button>
+              <button data-tone="corrija gramática e ortografia, mantendo o tom">✓ Corrigir</button>
+              <button data-tone="__custom__">⌨️ Outro tom…</button>
+            </div>
+          </div>
+          <textarea id="input" rows="1" placeholder="Mensagem"></textarea>
+          <button id="send" class="send-btn" title="Enviar">➤</button>
+        </footer>
+      </div>
+    </main>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settings" class="modal hidden">
+    <div class="modal-card wide">
+      <div class="modal-head"><h3>Configurações</h3><button id="settingsClose" class="icon-btn">✕</button></div>
+      <div class="settings-tabs">
+        <button data-st="numbers" class="active">Números</button>
+        <button data-st="telegram">Telegram</button>
+        <button data-st="users" class="admin-only hidden">Usuários</button>
+      </div>
+      <section id="st-numbers" class="st-view">
+        <button id="addAccount" class="btn-primary sm">+ Conectar número</button>
+        <div id="acctList"></div>
+      </section>
+      <section id="st-telegram" class="st-view hidden">
+        <p class="muted">Abra o bot, envie <code>/start</code> e cole o chat id para receber sugestões no Telegram.</p>
+        <div class="row"><input id="tgId" placeholder="Telegram chat id" /><button id="tgSave" class="btn-primary sm">Salvar</button></div>
+        <p id="tgMsg" class="msg"></p>
+      </section>
+      <section id="st-users" class="st-view hidden"><div id="usersList"></div></section>
+      <div class="modal-foot"><button id="logout" class="link">sair da conta</button></div>
+    </div>
+  </div>
+
+  <!-- CONTACT INFO -->
+  <div id="contact" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head"><h3>Dados do contato</h3><button id="contactClose" class="icon-btn">✕</button></div>
+      <div class="contact-body">
+        <div class="contact-avatar" id="cAvatar">·</div>
+        <div class="contact-name" id="cName"></div>
+        <div class="contact-phone" id="cPhone"></div>
+        <button id="cRename" class="btn-primary sm">✎ Editar nome</button>
+      </div>
+      <div class="contact-sections">
+        <div class="csec"><span>🔔 Sugestões automáticas</span><small>ativas</small></div>
+        <div class="csec"><span>🖼️ Mídia, links e docs</span><small>em breve</small></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR MODAL -->
+  <div id="qrModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head"><h3>Escaneie o QR</h3><button id="qrClose" class="icon-btn">✕</button></div>
+      <p class="muted">WhatsApp › Aparelhos conectados › Conectar aparelho</p>
+      <img id="qrImg" alt="QR" />
+      <p id="qrStatus" class="msg"></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
