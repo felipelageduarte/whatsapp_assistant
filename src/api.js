@@ -61,14 +61,13 @@ export function startApi() {
     res.json(store.listAccounts(BRIDGE_OWNER).map(accountView));
   });
 
-  app.post('/bridge/accounts', bridgeAuth, async (req, res) => {
+  app.post('/bridge/accounts', bridgeAuth, (req, res) => {
     const id = crypto.randomUUID();
     const a = store.createAccount({ id, owner: BRIDGE_OWNER, label: req.body?.label || 'WhatsApp da empresa' });
-    try {
-      await startSession(id); // dispara geracao de QR
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
+    // Fire-and-forget: startSession leva >10s (S3 + versao Baileys + socket)
+    // e o proxy da Lambda tem timeout — o QR chega pelo polling de
+    // /bridge/accounts/:id/qr de qualquer jeito.
+    startSession(id).catch((err) => console.error(`[bridge] startSession ${id.slice(0, 8)}:`, err.message));
     res.json(accountView(a));
   });
 
@@ -78,10 +77,10 @@ export function startApi() {
     res.json({ status: getSession(a.id)?.status || a.status, qr: getQR(a.id) });
   });
 
-  app.post('/bridge/accounts/:id/connect', bridgeAuth, async (req, res) => {
+  app.post('/bridge/accounts/:id/connect', bridgeAuth, (req, res) => {
     const a = store.getAccount(req.params.id);
     if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
-    try { await startSession(a.id); } catch (err) { return res.status(500).json({ error: err.message }); }
+    startSession(a.id).catch((err) => console.error(`[bridge] startSession ${a.id.slice(0, 8)}:`, err.message));
     res.json(accountView(store.getAccount(a.id)));
   });
 
