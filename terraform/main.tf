@@ -188,6 +188,18 @@ resource "aws_s3_bucket_public_access_block" "auth" {
   restrict_public_buckets = true
 }
 
+# ── CloudWatch Logs (observabilidade headless — journal da EC2 nao e acessivel
+#    remotamente; o CloudWatch Agent embarca /var/log/wa-assistant.log pra ca) ─
+resource "aws_cloudwatch_log_group" "service" {
+  name              = "/${var.project}/service"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "deploy" {
+  name              = "/${var.project}/deploy"
+  retention_in_days = 30
+}
+
 # ── IAM role + instance profile ──────────────────────────────────────────────
 data "aws_iam_policy_document" "assume_ec2" {
   statement {
@@ -239,6 +251,14 @@ data "aws_iam_policy_document" "app_access" {
     sid       = "AuthListBucket"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.auth.arn]
+  }
+  statement {
+    sid     = "ShipLogs"
+    actions = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams", "logs:PutRetentionPolicy"]
+    resources = [
+      "${aws_cloudwatch_log_group.service.arn}:*",
+      "${aws_cloudwatch_log_group.deploy.arn}:*",
+    ]
   }
 }
 
