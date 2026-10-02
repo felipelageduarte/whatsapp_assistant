@@ -25,7 +25,7 @@ variable "instance_type" {
 variable "domain" {
   description = "Dominio publico do app (Caddy emite TLS via Let's Encrypt automaticamente). Vazio = HTTP puro na porta 80 SEM dominio proprio — modo usado quando o BotImovel (CloudFront) serve este app via path /whatsapp/* na frente, terminando TLS la (ver infra/terraform/cloudfront.tf no repo BotImovelWeb). So' use um dominio aqui se for expor esta EC2 direto, sem CloudFront na frente."
   type        = string
-  default     = ""
+  default     = "whatsapp-bridge.botimovel.com.br"
 }
 
 variable "bedrock_model" {
