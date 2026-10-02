@@ -113,6 +113,36 @@ export function startApi() {
     res.json({ ok: true });
   });
 
+  // Conversas (consumidas pela página Conversas do BotImóvel via proxy).
+  app.get('/bridge/accounts/:id/chats', bridgeAuth, (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    res.json(store.listChats(a.id));
+  });
+
+  app.get('/bridge/accounts/:id/chats/:jid/messages', bridgeAuth, (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    const jid = decodeURIComponent(req.params.jid);
+    res.json({ messages: store.chatMessages(a.id, jid, Number(req.query.limit) || 80) });
+  });
+
+  // Envio manual pelo admin na página Conversas — humano digitou, humano é a
+  // aprovação; não passa pela fila de rascunhos.
+  app.post('/bridge/accounts/:id/chats/:jid/send', bridgeAuth, async (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    const jid = decodeURIComponent(req.params.jid);
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ error: 'texto vazio' });
+    try {
+      await sendFromAccount(a.id, jid, text);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   /* ---------- auth publico ---------- */
   app.post('/api/auth/register', (req, res) => {
     const { code, body } = authmod.register(req.body || {});
