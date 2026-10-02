@@ -30,7 +30,19 @@ function ownAccount(req, res) {
 // Owner fixo das contas gerenciadas pelo BotImóvel via endpoints /bridge/*
 // (não há usuário local — a UI é a página whatsapp.html do BotImóvel, que
 // autentica lá com bi_token e chega aqui via proxy da Lambda com o secret).
+// accounts.owner tem FK pra users(email), então o user fantasma precisa
+// existir — criado lazy, com hash impossível de bater (não é senha scrypt
+// válida) e approved=0: ninguém consegue logar como ele na web app local.
 const BRIDGE_OWNER = 'botimovel@bridge';
+
+function ensureBridgeOwner() {
+  if (!store.getUser(BRIDGE_OWNER)) {
+    store.createUser({
+      email: BRIDGE_OWNER, name: 'BotImóvel (bridge)', role: 'user',
+      passwordHash: 'bridge-service-account-no-login', approved: false,
+    });
+  }
+}
 
 function timingSafeEqual(a, b) {
   const ba = Buffer.from(String(a || ''));
@@ -62,6 +74,7 @@ export function startApi() {
   });
 
   app.post('/bridge/accounts', bridgeAuth, (req, res) => {
+    ensureBridgeOwner();
     const id = crypto.randomUUID();
     const a = store.createAccount({ id, owner: BRIDGE_OWNER, label: req.body?.label || 'WhatsApp da empresa' });
     // Fire-and-forget: startSession leva >10s (S3 + versao Baileys + socket)
