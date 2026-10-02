@@ -17,6 +17,7 @@ import { store } from './store.js';
 import { bus } from './bus.js';
 import { suggestReply } from './llm.js';
 import { useS3AuthState, deleteS3Auth } from './s3auth.js';
+import { notifyInbound, bridgeEnabled } from './bridge.js';
 
 // Carrega o auth state: S3 (duravel) se WA_AUTH_BUCKET setado, senao disco local.
 async function loadAuthState(accountId) {
@@ -192,7 +193,21 @@ async function handleIncoming(account, msg) {
 
   if (fromMe) return;
   bus.emit('incoming', { owner: account.owner, chatName: senderName, body: bodyText }); // -> push (sem LLM)
-  // sugestao NAO e gerada aqui (FinOps) — so quando o chat e aberto (suggestForChat).
+  // sugestao local NAO e gerada aqui (FinOps) — so quando o chat e aberto (suggestForChat).
+
+  // Ponte BotImóvel (opcional, ver bridge.js): manda a mensagem pra gerar
+  // rascunho lá (com contexto de fornecedor/cliente/projetos cadastrados) e
+  // aguardar aprovação pelo Telegram do BotImóvel, em vez do fluxo local de
+  // sugestão/aprovação deste app.
+  if (bridgeEnabled()) {
+    const phone = jid.endsWith('@s.whatsapp.net') ? jid.split('@')[0] : null;
+    if (phone) {
+      notifyInbound({
+        accountId: account.id, jid, phone, pushName: senderName,
+        text: bodyText, providerMessageId: msg.key.id,
+      });
+    }
+  }
 }
 
 export async function startSession(accountId) {

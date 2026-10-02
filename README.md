@@ -152,6 +152,23 @@ Bedrock (Claude) por token.
 | `aws/teardown-ec2.sh` | Desprovisiona tudo criado por `deploy-ec2.sh` |
 | `terraform/` | Recriação declarativa completa da infra (ver seu próprio README) |
 
+## Modo ponte (integração com BotImóvel)
+
+Quando `BOTIMOVEL_API_URL`/`BOTIMOVEL_BRIDGE_SECRET` estão setados (`.env.example`), este
+processo vira uma camada fina de conexão: mensagem recebida (`src/whatsapp.js` `handleIncoming`)
+é encaminhada pra `POST {BOTIMOVEL_API_URL}/whatsapp/inbound` em vez de só alimentar a
+sugestão/aprovação local — o rascunho é gerado lá (com acesso a fornecedores/clientes/projetos
+cadastrados no BotImóvel, não só estilo de escrita) e a aprovação acontece no Telegram do
+BotImóvel ("aprovar N"/"editar N: texto"/"rejeitar N"), não na UI web deste app. Um polling em
+`GET {BOTIMOVEL_API_URL}/whatsapp/outbox` (`src/bridge.js`, a cada `BOTIMOVEL_POLL_MS`) entrega o
+que foi aprovado via `sendFromAccount` e confirma em `POST /whatsapp/outbox/{id}/delivered`.
+
+Sem essas variáveis o app continua funcionando 100% standalone (sugestão/aprovação local via
+Bedrock + web app/Telegram deste próprio repo) — o modo ponte é aditivo, não substitui nada.
+
+Ver `docs/agent.md` (seção "Ponte WhatsApp") no repositório do BotImóvel pro desenho completo do
+outro lado.
+
 ## Decisões de design relevantes
 
 - **Sugestão sob demanda, não em background**: versão anterior gerava

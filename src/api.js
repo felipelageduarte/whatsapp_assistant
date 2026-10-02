@@ -27,10 +27,79 @@ function ownAccount(req, res) {
   return a;
 }
 
+// Owner fixo das contas gerenciadas pelo BotImóvel via endpoints /bridge/*
+// (não há usuário local — a UI é a página whatsapp.html do BotImóvel, que
+// autentica lá com bi_token e chega aqui via proxy da Lambda com o secret).
+const BRIDGE_OWNER = 'botimovel@bridge';
+
+function timingSafeEqual(a, b) {
+  const ba = Buffer.from(String(a || ''));
+  const bb = Buffer.from(String(b || ''));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+// Auth dos endpoints /bridge/*: mesmo secret compartilhado que este processo
+// usa pra falar com o BotImóvel (simétrico de propósito — um canal, um secret).
+function bridgeAuth(req, res, next) {
+  const secret = config.botimovelBridgeSecret;
+  if (!secret || !timingSafeEqual(req.get('x-whatsapp-bridge-secret'), secret)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  next();
+}
+
 export function startApi() {
   const app = express();
   app.use(express.json());
   app.use(express.static(webDir));
+
+  /* ---------- endpoints headless pro BotImóvel (auth por secret) ---------- */
+  // Gestão de contas/QR consumida pela página whatsapp.html do BotImóvel via
+  // proxy na Lambda (routes/whatsapp.mjs) — nunca exposta direto ao browser.
+  app.get('/bridge/accounts', bridgeAuth, (req, res) => {
+    res.json(store.listAccounts(BRIDGE_OWNER).map(accountView));
+  });
+
+  app.post('/bridge/accounts', bridgeAuth, async (req, res) => {
+    const id = crypto.randomUUID();
+    const a = store.createAccount({ id, owner: BRIDGE_OWNER, label: req.body?.label || 'WhatsApp da empresa' });
+    try {
+      await startSession(id); // dispara geracao de QR
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.json(accountView(a));
+  });
+
+  app.get('/bridge/accounts/:id/qr', bridgeAuth, (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    res.json({ status: getSession(a.id)?.status || a.status, qr: getQR(a.id) });
+  });
+
+  app.post('/bridge/accounts/:id/connect', bridgeAuth, async (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    try { await startSession(a.id); } catch (err) { return res.status(500).json({ error: err.message }); }
+    res.json(accountView(store.getAccount(a.id)));
+  });
+
+  app.post('/bridge/accounts/:id/relink', bridgeAuth, async (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    await stopSession(a.id, { logout: true });
+    startSession(a.id).catch(() => {});
+    res.json({ ok: true });
+  });
+
+  app.delete('/bridge/accounts/:id', bridgeAuth, async (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    await stopSession(a.id, { logout: true });
+    store.deleteAccount(a.id);
+    res.json({ ok: true });
+  });
 
   /* ---------- auth publico ---------- */
   app.post('/api/auth/register', (req, res) => {

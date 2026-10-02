@@ -23,9 +23,9 @@ variable "instance_type" {
 }
 
 variable "domain" {
-  description = "Dominio publico do app (Caddy emite TLS via Let's Encrypt automaticamente). Deixe vazio para servir em HTTP puro na porta 80 (inseguro para login em internet publica)."
+  description = "Dominio publico do app (Caddy emite TLS via Let's Encrypt automaticamente). Vazio = HTTP puro na porta 80 SEM dominio proprio — modo usado quando o BotImovel (CloudFront) serve este app via path /whatsapp/* na frente, terminando TLS la (ver infra/terraform/cloudfront.tf no repo BotImovelWeb). So' use um dominio aqui se for expor esta EC2 direto, sem CloudFront na frente."
   type        = string
-  default     = "assistant.felipelageduarte.com.br"
+  default     = ""
 }
 
 variable "bedrock_model" {
@@ -69,4 +69,17 @@ variable "context_window" {
   description = "Quantidade de mensagens anteriores usadas como contexto para o LLM."
   type        = number
   default     = 15
+}
+
+variable "botimovel_api_url" {
+  description = "URL base da API do BotImóvel (ex.: https://api.botimovel.com.br). Vazio = modo standalone, sem ponte."
+  type        = string
+  default     = ""
+}
+
+variable "botimovel_bridge_secret" {
+  description = "Secret gerado em POST /whatsapp/bridge/rotate-secret (BotImóvel, admin) — autentica esta instância em /whatsapp/inbound e /whatsapp/outbox*."
+  type        = string
+  sensitive   = true
+  default     = ""
 }

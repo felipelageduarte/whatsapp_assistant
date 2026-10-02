@@ -26,6 +26,13 @@ export const config = {
   },
   port: Number(process.env.PORT || 3000),
   ignoreGroups: bool(process.env.IGNORE_GROUPS, true),
+  // Ponte com o BotImóvel (lib/agent/whatsapp.mjs): quando setado, mensagem
+  // recebida vira POST /whatsapp/inbound lá (rascunho + aprovação pelo
+  // Telegram do BotImóvel) em vez da sugestão local (store/llm/actions daqui)
+  // — evita gerar E cobrar LLM duas vezes pela mesma mensagem.
+  botimovelApiUrl: (process.env.BOTIMOVEL_API_URL || '').replace(/\/+$/, ''),
+  botimovelBridgeSecret: process.env.BOTIMOVEL_BRIDGE_SECRET || '',
+  botimovelPollMs: Number(process.env.BOTIMOVEL_POLL_MS || 4000),
   contextWindow: Number(process.env.CONTEXT_WINDOW || 15),
   persona:
     process.env.PERSONA ||

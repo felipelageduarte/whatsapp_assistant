@@ -24,6 +24,9 @@ TELEGRAM_BOT_TOKEN=$(get TELEGRAM_BOT_TOKEN)
 PORT=3000
 IGNORE_GROUPS=${ignore_groups}
 CONTEXT_WINDOW=${context_window}
+BOTIMOVEL_API_URL=$(get BOTIMOVEL_API_URL)
+BOTIMOVEL_BRIDGE_SECRET=$(get BOTIMOVEL_BRIDGE_SECRET)
+BOTIMOVEL_POLL_MS=4000
 ENV
 cat > /etc/systemd/system/wa-assistant.service <<UNIT
 [Unit]
@@ -40,9 +43,17 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload && systemctl enable --now wa-assistant
 mkdir -p /etc/caddy
+%{ if domain != "" }
 cat > /etc/caddy/Caddyfile <<CADDY
 ${domain} {
     reverse_proxy localhost:3000
 }
 CADDY
+%{ else }
+cat > /etc/caddy/Caddyfile <<'CADDY'
+:80 {
+    reverse_proxy localhost:3000
+}
+CADDY
+%{ endif }
 systemctl enable --now caddy 2>/dev/null || (caddy run --config /etc/caddy/Caddyfile &)

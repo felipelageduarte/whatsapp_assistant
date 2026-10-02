@@ -114,6 +114,24 @@ resource "aws_ssm_parameter" "vapid_subject" {
   overwrite = true
 }
 
+# Ponte com o BotImóvel (ver botimovel-api routes/whatsapp.mjs): vazio = modo
+# standalone (sugestão/aprovação local, sem integração).
+resource "aws_ssm_parameter" "botimovel_api_url" {
+  count     = var.botimovel_api_url != "" ? 1 : 0
+  name      = "/${var.project}/BOTIMOVEL_API_URL"
+  type      = "SecureString"
+  value     = var.botimovel_api_url
+  overwrite = true
+}
+
+resource "aws_ssm_parameter" "botimovel_bridge_secret" {
+  count     = var.botimovel_bridge_secret != "" ? 1 : 0
+  name      = "/${var.project}/BOTIMOVEL_BRIDGE_SECRET"
+  type      = "SecureString"
+  value     = var.botimovel_bridge_secret
+  overwrite = true
+}
+
 # ── S3: bundle de codigo ──────────────────────────────────────────────────────
 resource "aws_s3_bucket" "bundle" {
   bucket = local.bundle_bucket
@@ -336,6 +354,8 @@ resource "aws_instance" "this" {
     aws_ssm_parameter.vapid_public,
     aws_ssm_parameter.vapid_private,
     aws_ssm_parameter.vapid_subject,
+    aws_ssm_parameter.botimovel_api_url,
+    aws_ssm_parameter.botimovel_bridge_secret,
   ]
 }
 
