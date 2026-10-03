@@ -224,6 +224,7 @@ async function handleIncoming(account, msg) {
         notifyInbound({
           accountId: account.id, jid, phone, pushName: senderName,
           text: bodyText, providerMessageId: msg.key.id,
+          mediaType: media?.type || null, waId: media ? msg.key.id : null,
         });
       }
     }
@@ -256,7 +257,7 @@ async function transcribeAndNotify(account, { jid, phone, senderName, waId, mime
   notifyInbound({
     accountId: account.id, jid, phone, pushName: senderName,
     text: text ? `[Áudio transcrito] ${text}` : '🎤 Mensagem de voz (transcrição indisponível)',
-    providerMessageId: waId,
+    providerMessageId: waId, mediaType: 'audio', waId,
   });
 }
 

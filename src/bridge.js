@@ -26,12 +26,16 @@ async function botimovelFetch(path, opts = {}) {
 }
 
 // Chamado por whatsapp.js a cada mensagem inbound (não-fromMe, não-grupo).
-export async function notifyInbound({ accountId, jid, phone, pushName, text, providerMessageId }) {
+// mediaType/waId (opcionais) deixam o classificador do BotImóvel BUSCAR a
+// mídia (GET /bridge/accounts/:id/media/:waId, já existe pro chat ao vivo) e
+// analisá-la com visão — antes disso um comprovante em imagem virava só o
+// rótulo "📷 Foto" no texto, invisível pro motor de pagamento.
+export async function notifyInbound({ accountId, jid, phone, pushName, text, providerMessageId, mediaType, waId }) {
   if (!enabled()) return;
   try {
     await botimovelFetch('/whatsapp/inbound', {
       method: 'POST',
-      body: JSON.stringify({ accountId, jid, phone, pushName, text, providerMessageId }),
+      body: JSON.stringify({ accountId, jid, phone, pushName, text, providerMessageId, mediaType, waId }),
     });
   } catch (err) {
     console.error('[bridge] falha ao notificar inbound:', err.message);
