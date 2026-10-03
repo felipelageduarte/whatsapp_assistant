@@ -9,7 +9,7 @@ import { bus } from './bus.js';
 import * as authmod from './auth.js';
 import { authMiddleware, requireAdmin, pub, verify } from './auth.js';
 import { approveSuggestion, rejectSuggestion } from './actions.js';
-import { startSession, stopSession, getQR, getSession, sendFromAccount, getProfilePicture, getMediaStream, suggestForChat } from './whatsapp.js';
+import { startSession, stopSession, getQR, getSession, sendFromAccount, getProfilePicture, getMediaStream, getMediaUrl, suggestForChat } from './whatsapp.js';
 import { rewriteMessage } from './llm.js';
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'web');
@@ -125,6 +125,21 @@ export function startApi() {
     if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
     const jid = decodeURIComponent(req.params.jid);
     res.json({ messages: store.chatMessages(a.id, jid, Number(req.query.limit) || 80) });
+  });
+
+  // Midia de uma mensagem (imagem/audio/doc): garante download->S3 e devolve
+  // URL presignada (15 min) + transcript, pro BotImóvel renderizar na página
+  // Conversas sem streamar binario pela Lambda.
+  app.get('/bridge/accounts/:id/media/:waId', bridgeAuth, async (req, res) => {
+    const a = store.getAccount(req.params.id);
+    if (!a) return res.status(404).json({ error: 'numero nao encontrado' });
+    try {
+      const m = await getMediaUrl(a.id, decodeURIComponent(req.params.waId));
+      if (!m) return res.status(404).json({ error: 'midia indisponivel' });
+      res.json(m);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Envio manual pelo admin na página Conversas — humano digitou, humano é a

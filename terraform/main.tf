@@ -228,6 +228,11 @@ data "aws_iam_policy_document" "app_access" {
     resources = ["*"]
   }
   statement {
+    sid       = "Transcribe"
+    actions   = ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob", "transcribe:DeleteTranscriptionJob"]
+    resources = ["*"]
+  }
+  statement {
     sid       = "ReadOwnParams"
     actions   = ["ssm:GetParameter", "ssm:GetParameters"]
     resources = ["arn:aws:ssm:${var.aws_region}:${local.account_id}:parameter/${var.project}/*"]

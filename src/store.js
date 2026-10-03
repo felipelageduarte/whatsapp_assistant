@@ -104,6 +104,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_suggestions_acct ON suggestions(account_id, status, created_at);
 `);
 
+// Coluna nova em DB legado (transcricao de audio via Amazon Transcribe).
+try { db.exec(`ALTER TABLE media ADD COLUMN transcript TEXT`); } catch { /* ja existe */ }
+
 // Indice unico p/ dedup do history sync. Em DB legado com wa_id duplicado,
 // remove os duplicados antes de criar (mantem o menor id).
 try {
@@ -209,7 +212,8 @@ const stmt = {
   chatMessages: db.prepare(
     `SELECT * FROM (
        SELECT m.id, m.wa_id, m.from_me, m.sender_name, m.body, m.ts,
-              med.type AS media_type, med.mime AS media_mime, med.name AS media_name, med.caption AS media_caption
+              med.type AS media_type, med.mime AS media_mime, med.name AS media_name, med.caption AS media_caption,
+              med.transcript AS media_transcript
        FROM messages m
        LEFT JOIN media med ON med.account_id=m.account_id AND med.wa_id=m.wa_id
        WHERE m.account_id=? AND m.jid=? ORDER BY m.ts DESC LIMIT ?
@@ -245,6 +249,7 @@ const stmt = {
   getMedia: db.prepare(`SELECT * FROM media WHERE account_id=? AND wa_id=?`),
   mediaReady: db.prepare(`UPDATE media SET status='ready', s3_key=? WHERE account_id=? AND wa_id=?`),
   mediaFailed: db.prepare(`UPDATE media SET status='failed' WHERE account_id=? AND wa_id=?`),
+  setTranscript: db.prepare(`UPDATE media SET transcript=? WHERE account_id=? AND wa_id=?`),
 };
 
 export const store = {
@@ -338,6 +343,7 @@ export const store = {
   getMedia: (accountId, waId) => stmt.getMedia.get(accountId, waId),
   mediaReady: (accountId, waId, s3Key) => stmt.mediaReady.run(s3Key, accountId, waId),
   mediaFailed: (accountId, waId) => stmt.mediaFailed.run(accountId, waId),
+  setTranscript: (accountId, waId, text) => stmt.setTranscript.run(text, accountId, waId),
 
   // Aprende lid->pn e migra mensagens/contatos/sugestoes do chat @lid p/ o telefone.
   setLidMap(accountId, lid, pn) {

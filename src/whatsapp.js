@@ -9,6 +9,7 @@ import makeWASocket, {
   BufferJSON,
 } from '@whiskeysockets/baileys';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import QRCode from 'qrcode';
 import pino from 'pino';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -18,6 +19,7 @@ import { bus } from './bus.js';
 import { suggestReply } from './llm.js';
 import { useS3AuthState, deleteS3Auth } from './s3auth.js';
 import { notifyInbound, bridgeEnabled } from './bridge.js';
+import { transcribeAudio } from './transcribe.js';
 
 // Carrega o auth state: S3 (duravel) se WA_AUTH_BUCKET setado, senao disco local.
 async function loadAuthState(accountId) {
@@ -187,6 +189,17 @@ async function handleIncoming(account, msg) {
   if (media && msg.key.id) {
     const payload = JSON.stringify({ key: msg.key, message: unwrap(msg.message) }, BufferJSON.replacer);
     store.addMedia({ accountId: account.id, waId: msg.key.id, ...media, payload });
+    // Audio/imagem/documento: baixa pro S3 ja na chegada (nao espera abrir o
+    // chat) — a midia do WhatsApp expira nos servidores deles em semanas.
+    if (['image', 'document'].includes(media.type)) {
+      ensureMedia(account.id, msg.key.id).catch(() => {});
+    }
+    // Audio ENVIADO pela conta: transcreve so pro registro/UI (inbound e
+    // transcrito em transcribeAndNotify, que tambem notifica o BotImóvel).
+    if (media.type === 'audio' && fromMe) {
+      transcribeStored(account, jid, msg.key.id, media.mime)
+        .catch((err) => console.error(`[wa:${account.id.slice(0, 8)}] transcricao (fromMe) ${msg.key.id} falhou:`, err.message));
+    }
   }
 
   bus.emit('message', { owner: account.owner, accountId: account.id, jid });
@@ -202,12 +215,49 @@ async function handleIncoming(account, msg) {
   if (bridgeEnabled()) {
     const phone = jid.endsWith('@s.whatsapp.net') ? jid.split('@')[0] : null;
     if (phone) {
-      notifyInbound({
-        accountId: account.id, jid, phone, pushName: senderName,
-        text: bodyText, providerMessageId: msg.key.id,
-      });
+      if (media?.type === 'audio') {
+        // Mensagem de voz: transcreve ANTES de notificar — o classificador de
+        // pagamento do BotImóvel precisa do conteudo real, nao do rotulo
+        // "🎤 Mensagem de voz". Fire-and-forget: nao bloqueia o handler.
+        transcribeAndNotify(account, { jid, phone, senderName, waId: msg.key.id, mime: media.mime });
+      } else {
+        notifyInbound({
+          accountId: account.id, jid, phone, pushName: senderName,
+          text: bodyText, providerMessageId: msg.key.id,
+        });
+      }
     }
   }
+}
+
+// Baixa o audio do S3 (garantindo o download do WhatsApp antes), transcreve
+// via Amazon Transcribe e persiste na tabela media. Devolve o texto ou null.
+async function transcribeStored(account, jid, waId, mime) {
+  const row = await ensureMedia(account.id, waId);
+  if (!row?.s3_key) return null;
+  const text = await transcribeAudio({ s3Key: row.s3_key, mime, jobHint: waId });
+  if (text) {
+    store.setTranscript(account.id, waId, text);
+    bus.emit('message', { owner: account.owner, accountId: account.id, jid });
+    console.log(`[wa:${account.id.slice(0, 8)}] audio ${waId} transcrito (${text.length} chars)`);
+  }
+  return text;
+}
+
+// Audio RECEBIDO: transcreve e so entao notifica o BotImóvel com o texto —
+// o classificador de pagamento processa o conteudo real da mensagem de voz.
+async function transcribeAndNotify(account, { jid, phone, senderName, waId, mime }) {
+  let text = null;
+  try {
+    text = await transcribeStored(account, jid, waId, mime);
+  } catch (err) {
+    console.error(`[wa:${account.id.slice(0, 8)}] transcricao ${waId} falhou:`, err.message);
+  }
+  notifyInbound({
+    accountId: account.id, jid, phone, pushName: senderName,
+    text: text ? `[Áudio transcrito] ${text}` : '🎤 Mensagem de voz (transcrição indisponível)',
+    providerMessageId: waId,
+  });
 }
 
 export async function startSession(accountId) {
@@ -354,6 +404,20 @@ export async function getMediaStream(accountId, waId) {
   if (!row) return null;
   const r = await s3.send(new GetObjectCommand({ Bucket: config.authBucket, Key: row.s3_key }));
   return { body: r.Body, mime: row.mime, name: row.name };
+}
+
+// URL presignada (15 min) pro BotImóvel servir a midia direto do S3 ao
+// browser — evita streamar binario atraves da Lambda proxy.
+export async function getMediaUrl(accountId, waId) {
+  const row = await ensureMedia(accountId, waId);
+  if (!row?.s3_key) return null;
+  const url = await getSignedUrl(
+    s3,
+    new GetObjectCommand({ Bucket: config.authBucket, Key: row.s3_key }),
+    { expiresIn: 900 }
+  );
+  const fresh = store.getMedia(accountId, waId) || row;
+  return { url, mime: fresh.mime, name: fresh.name, type: fresh.type, caption: fresh.caption, transcript: fresh.transcript || null };
 }
 
 export async function stopSession(accountId, { logout = false } = {}) {
